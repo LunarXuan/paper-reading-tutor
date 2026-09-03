@@ -1,0 +1,7 @@
+interface:
+  display_name: "论文研读助手"
+  short_description: "检索论文、生成中文译稿，并分层讲解论证、实验与图公式"
+  default_prompt: "Use $paper-reading-tutor to read this paper. After confirming translation preference, ask whether I want 快速导读模式 or 深度精读模式, then follow the selected depth."
+
+policy:
+  allow_implicit_invocation: true
