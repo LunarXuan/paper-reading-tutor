@@ -97,7 +97,9 @@
 
 默认翻译题名、摘要、正文、图注、表题、脚注、致谢和附录；参考文献的作者、出处、页码、DOI、URL 和正式题名通常保持原文，以免破坏检索。
 
-翻译会优先采用专业领域通行译法，并在首次出现时使用“中文（English）”。公式、变量、单位、数据、代码、模型名、引用编号、交叉引用和图像不被改写。交付前检查中文文本是否可搜索、字体是否正常、图表和公式是否被裁切或重叠。
+翻译会优先采用专业领域通行译法，并在首次出现时使用“中文（English）”。公式、变量、单位、数据、代码、模型名、引用编号、交叉引用和图像不被改写。
+
+译稿采用严格的交付门槛：安全恢复上下标标记；扫描 NUL、乱码和字面标签；隔离算法与正文流对象；复核图表裁切边界；渲染并视觉检查每一页；附有原页时核对页面内容流。仓库提供 [`scripts/validate_translation_pdf.py`](scripts/validate_translation_pdf.py)，用于自动生成全页联系表并执行确定性预检；自动结果不能替代逐页视觉确认。
 
 ## 使用方式
 
@@ -146,8 +148,10 @@ paper-reading-tutor/
 ├── README.md
 ├── agents/
 │   └── openai.yaml
-└── references/
-    └── translation-pdf.md
+├── references/
+│   └── translation-pdf.md
+└── scripts/
+    └── validate_translation_pdf.py
 ```
 
 ## 友情链接
