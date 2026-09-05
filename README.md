@@ -99,7 +99,15 @@
 
 翻译会优先采用专业领域通行译法，并在首次出现时使用“中文（English）”。公式、变量、单位、数据、代码、模型名、引用编号、交叉引用和图像不被改写。
 
-译稿采用严格的交付门槛：安全恢复上下标标记；扫描 NUL、乱码和字面标签；隔离算法与正文流对象；复核图表裁切边界；渲染并视觉检查每一页；附有原页时核对页面内容流。仓库提供 [`scripts/validate_translation_pdf.py`](scripts/validate_translation_pdf.py)，用于自动生成全页联系表并执行确定性预检；自动结果不能替代逐页视觉确认。
+译稿采用严格的交付检查：中文断行与左对齐、静态常规字重；安全恢复上下标标记；扫描 NUL、乱码和字面标签；隔离算法与正文流对象；复核图表裁切边界；渲染并以正文可读尺寸视觉检查每一页。联系表和自动检查通过不等于完成视觉验收。
+
+可复用的排版与检测工具：
+
+- [`scripts/cjk_layout.py`](scripts/cjk_layout.py)：中文正文、单元格、图注、提示词和列表的 ReportLab 样式；基于实际字形坐标的大空隙检查，以及可疑纤细正文字体检查。
+- [`scripts/validate_translation_pdf.py`](scripts/validate_translation_pdf.py)：全页渲染、3×3 联系表、文本层/间距/近空白/边缘检查；附有完整原页时核对内容流。误报只能在视觉确认后记录局部排除区域，不能直接忽略正文异常。
+- [`scripts/test_cjk_layout.py`](scripts/test_cjk_layout.py)：实际 PDF 正反例回归测试，覆盖旧两端对齐失败、修复后段落、表格列间隔与单元格内部、列表和符号/标识符。
+
+验证脚本依赖 `pypdf`、`pdfplumber`、`Pillow` 和 Poppler `pdftoppm`；样式和测试另需 `reportlab` 与静态中文 TrueType 字体。运行 `python -m unittest discover -s scripts -p 'test_*.py' -v`；非 Windows 环境可通过 `CJK_TEST_FONT` 指定测试字体。具体参数和视觉验收步骤见翻译流程。
 
 ## 使用方式
 
@@ -151,6 +159,8 @@ paper-reading-tutor/
 ├── references/
 │   └── translation-pdf.md
 └── scripts/
+    ├── cjk_layout.py
+    ├── test_cjk_layout.py
     └── validate_translation_pdf.py
 ```
 

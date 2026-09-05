@@ -3,13 +3,15 @@
 
 This script does not replace visual review. It renders every page, creates
 contact sheets, and fails on text-layer corruption, render-count mismatch,
-near-empty pages, or a mismatched source-page appendix.
+near-empty pages, oversized CJK line gaps, thin body fonts, or a mismatched
+source-page appendix. Dependencies: pypdf, pdfplumber, Pillow, and pdftoppm.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import shutil
 import subprocess
 import sys
@@ -17,6 +19,9 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 from pypdf import PdfReader
+import pdfplumber
+
+from cjk_layout import audit_layout
 
 
 LITERAL_MARKERS = (
@@ -30,6 +35,8 @@ LITERAL_MARKERS = (
     "&lt;/sub&gt;",
     "&lt;sup&gt;",
     "&lt;/sup&gt;",
+    "&lt;super&gt;",
+    "&lt;/super&gt;",
     "[symbol]sub",
     "[symbol]/sub",
 )
@@ -59,7 +66,9 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Fresh directory for rendered pages, contact sheets, and audit.json",
     )
-    parser.add_argument("--dpi", type=int, default=96)
+    parser.add_argument("--dpi", type=int, default=150)
+    parser.add_argument("--layout-exclusions", type=Path,
+                        help="JSON list of {page, bbox: [left, top, right, bottom], reason}; only visually confirmed intentional regions")
     return parser.parse_args()
 
 
@@ -135,8 +144,8 @@ def raster_metrics(path: Path) -> dict:
 
 
 def make_contact_sheets(pngs: list[Path], audit_dir: Path) -> list[Path]:
-    cols, rows = 5, 5
-    cell_width, cell_height = 230, 320
+    cols, rows = 3, 3
+    cell_width, cell_height = 360, 510
     outputs = []
     for start in range(0, len(pngs), cols * rows):
         chunk = pngs[start : start + cols * rows]
@@ -199,6 +208,26 @@ def main() -> int:
     executable = resolve_pdftoppm(args.pdftoppm)
     text_report = text_layer_audit(reader, translated_pages)
     page_text = text_report.pop("page_text")
+    exclusions = []
+    if args.layout_exclusions:
+        exclusions = json.loads(args.layout_exclusions.read_text(encoding="utf-8"))
+        if not isinstance(exclusions, list):
+            raise ValueError("layout exclusions must be a list")
+        for item in exclusions:
+            if (not isinstance(item, dict) or not isinstance(item.get("page"), int)
+                or not 1 <= item["page"] <= translated_pages
+                or not isinstance(item.get("reason"), str) or not item["reason"].strip()
+                or not isinstance(item.get("bbox"), list) or len(item["bbox"]) != 4):
+                raise ValueError("each exclusion needs a translated-page number, four coordinates, and a reason")
+            left, top, right, bottom = item["bbox"]
+            if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in item["bbox"]) or not (0 <= left < right and 0 <= top < bottom):
+                raise ValueError("invalid exclusion bbox")
+    with pdfplumber.open(pdf) as layout_document:
+        for item in exclusions:
+            page = layout_document.pages[item["page"] - 1]
+            if item["bbox"][2] > page.width or item["bbox"][3] > page.height:
+                raise ValueError("exclusion bbox is outside the page")
+        layout_report = audit_layout(layout_document, translated_pages, exclusions)
     pngs = render_pdf(pdf, executable, audit_dir, args.dpi)
     if len(pngs) != len(reader.pages):
         raise RuntimeError(f"rendered {len(pngs)} pages for a {len(reader.pages)}-page PDF")
@@ -224,6 +253,7 @@ def main() -> int:
         "pages": len(reader.pages),
         "translated_pages": translated_pages,
         "text_layer": text_report,
+        "layout": layout_report,
         "blank_suspects": [page["page"] for page in pages if page["blank_suspect"]],
         "edge_suspects": [page["page"] for page in pages if page["edge_suspect"]],
         "source_appendix": appendix,
@@ -240,9 +270,13 @@ def main() -> int:
         hard_failures.append("blank/near-blank page suspects")
     if appendix and not appendix.get("streams_exact"):
         hard_failures.append("source appendix mismatch")
+    if layout_report["findings"]:
+        hard_failures.append("oversized line gaps require correction or documented visual review")
+    if layout_report["thin_body_fonts"]:
+        hard_failures.append("thin body font requires a readable regular-weight font")
 
     print(json.dumps({key: value for key, value in report.items() if key != "page_metrics"}, ensure_ascii=False, indent=2))
-    print("Open every contact sheet and inspect all pages before delivery.", file=sys.stderr)
+    print("Open every page at readable size before delivery; contact sheets and exit 0 do not certify visual quality.", file=sys.stderr)
     if report["edge_suspects"]:
         print("Edge suspects require visual crop review.", file=sys.stderr)
     if hard_failures:
@@ -257,4 +291,3 @@ if __name__ == "__main__":
     except Exception as error:
         print(f"ERROR: {error}", file=sys.stderr)
         raise SystemExit(2)
-
